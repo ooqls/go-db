@@ -36,4 +36,5 @@ func TestConnect(t *testing.T) {
 	t.Log("Running integration tests...")
 
 	db.InitDefault()
+	
 }

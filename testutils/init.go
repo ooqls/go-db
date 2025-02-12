@@ -14,40 +14,12 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-func initRegistry() {
-	// Initialize the registry with default values
-	registry.Set(registry.Registry{
-		Redis: &registry.Server{
-			Host: "localhost",
-			Port: 6379,
-			Auth: registry.Auth{
-				Enabled:  true,
-				Password: "password",
-			},
-		},
-		Postgres: &registry.Server{
-			Host: "localhost",
-			Port: 5432,
-			Auth: registry.Auth{
-				Enabled:  true,
-				Username: "user",
-				Password: "user100",
-			},
-		},
-	})
-}
+var reg registry.Registry = registry.Registry{}
 
 func InitRedis() testcontainers.Container {
 	ctx := context.Background()
-	arch := runtime.GOARCH
-	log.Printf("Detected architecture: %s", arch)
-	
-	image := "redis:latest"
-	if arch == "arm64" {
-		image = "arm64v8/redis:latest"
-	}
 	c := testcontainers.ContainerRequest{
-		Image:        image,
+		Image:        "redis:latest",
 		ExposedPorts: []string{"6379"},
 		WaitingFor:   &wait.LogStrategy{Log: "Ready to accept connections"},
 		Env: map[string]string{
@@ -73,7 +45,15 @@ func InitRedis() testcontainers.Container {
 	log.Printf("redis should be running at localhost:%d", port.Int())
 	time.Sleep(time.Second * 5)
 
-	initRegistry()
+	reg.Redis = &registry.Server{
+		Host: "localhost",
+		Port: port.Int(),
+		Auth: registry.Auth{
+			Enabled:  true,
+			Password: "password",
+		},
+	}
+	registry.Set(reg)
 
 	return container
 }
@@ -118,7 +98,17 @@ func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Conta
 	log.Printf("postgres should be running at localhost:%d", port.Int())
 	time.Sleep(time.Second * 5)
 
-	initRegistry()
+	
+	reg.Postgres = &registry.Server{
+		Host: "localhost",
+		Port: port.Int(),
+		Auth: registry.Auth{
+			Enabled:  true,
+			Username: "user",
+			Password: "user100",
+		},
+	}
+	registry.Set(reg)
 
 	err = db.InitDefault()
 	if err != nil {
