@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime"
 	"time"
 
 	"github.com/braumsmilk/go-db"
@@ -13,10 +14,40 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+func initRegistry() {
+	// Initialize the registry with default values
+	registry.Set(registry.Registry{
+		Redis: &registry.Server{
+			Host: "localhost",
+			Port: 6379,
+			Auth: registry.Auth{
+				Enabled:  true,
+				Password: "password",
+			},
+		},
+		Postgres: &registry.Server{
+			Host: "localhost",
+			Port: 5432,
+			Auth: registry.Auth{
+				Enabled:  true,
+				Username: "user",
+				Password: "user100",
+			},
+		},
+	})
+}
+
 func InitRedis() testcontainers.Container {
 	ctx := context.Background()
+	arch := runtime.GOARCH
+	log.Printf("Detected architecture: %s", arch)
+	
+	image := "redis:latest"
+	if arch == "arm64" {
+		image = "arm64v8/redis:latest"
+	}
 	c := testcontainers.ContainerRequest{
-		Image:        "redis:latest",
+		Image:        image,
 		ExposedPorts: []string{"6379"},
 		WaitingFor:   &wait.LogStrategy{Log: "Ready to accept connections"},
 		Env: map[string]string{
@@ -42,24 +73,21 @@ func InitRedis() testcontainers.Container {
 	log.Printf("redis should be running at localhost:%d", port.Int())
 	time.Sleep(time.Second * 5)
 
-	registry.Set(registry.Registry{
-		Redis: &registry.Server{
-			Host: "localhost",
-			Port: port.Int(),
-			Auth: registry.Auth{
-				Enabled:  true,
-				Password: "password",
-			},
-		},
-	})
+	initRegistry()
 
 	return container
 }
 
 func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Container {
 	ctx := context.Background()
+	arch := runtime.GOARCH
+	image := "postgres:latest"
+	if arch == "arm64" {
+		image = "arm64v8/postgres:latest"
+	}
+	log.Printf("Detected architecture: %s", arch)
 	c := testcontainers.ContainerRequest{
-		Image:        "postgres:latest",
+		Image:        image,
 		ExposedPorts: []string{"5432"},
 		Env: map[string]string{
 			"POSTGRES_USER":     "user",
@@ -90,17 +118,7 @@ func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Conta
 	log.Printf("postgres should be running at localhost:%d", port.Int())
 	time.Sleep(time.Second * 5)
 
-	registry.Set(registry.Registry{
-		Postgres: &registry.Server{
-			Host: "localhost",
-			Port: port.Int(),
-			Auth: registry.Auth{
-				Enabled:  true,
-				Username: "user",
-				Password: "user100",
-			},
-		},
-	})
+	initRegistry()
 
 	err = db.InitDefault()
 	if err != nil {
