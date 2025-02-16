@@ -5,11 +5,14 @@ go 1.22.0
 require (
 	github.com/braumsmilk/go-log v0.1.0
 	github.com/braumsmilk/go-registry v0.1.0
+	github.com/gomodule/redigo v1.9.2
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/lib/pq v1.10.9
 	github.com/testcontainers/testcontainers-go v0.35.0
 	go.uber.org/zap v1.27.0
 )
+
+replace github.com/braumsmilk/go-registry => /Users/samuelreynolds/github.com/braumsmilk/go-registry
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/braumsmilk/go-db"
+	"github.com/braumsmilk/go-db/postgres"
 	"github.com/braumsmilk/go-db/testutils"
 )
 
@@ -35,6 +35,6 @@ func TestConnect(t *testing.T) {
 	// You can add your actual test logic here.
 	t.Log("Running integration tests...")
 
-	db.InitDefault()
+	postgres.InitDefault()
 	
 }

@@ -7,8 +7,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/braumsmilk/go-db"
-	"github.com/braumsmilk/go-db/init/seed"
+	"github.com/braumsmilk/go-db/postgres"
 	"github.com/braumsmilk/go-registry"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -85,10 +84,6 @@ func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Conta
 	if err != nil {
 		panic(fmt.Errorf("failed to start postgres container: %v", err))
 	}
-	// host, err := container.Host(ctx)
-	// if err != nil {
-	// 	panic(fmt.Errorf("failed to get host ip from container: %v", err))
-	// }
 
 	port, err := container.MappedPort(ctx, "5432")
 	if err != nil {
@@ -98,7 +93,6 @@ func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Conta
 	log.Printf("postgres should be running at localhost:%d", port.Int())
 	time.Sleep(time.Second * 5)
 
-	
 	reg.Postgres = &registry.Server{
 		Host: "localhost",
 		Port: port.Int(),
@@ -110,12 +104,12 @@ func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Conta
 	}
 	registry.Set(reg)
 
-	err = db.InitDefault()
+	err = postgres.InitDefault()
 	if err != nil {
 		panic(err)
 	}
 
-	seed.SeedPostgresDatabase(tableStmts, indexStmts)
+	postgres.Seed(tableStmts, indexStmts)
 
 	return container
 }
