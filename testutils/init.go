@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/braumsmilk/go-db/postgres"
-	"github.com/braumsmilk/go-registry"
+	"github.com/ooqls/go-db/postgres"
+	"github.com/ooqls/go-registry"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -44,12 +44,16 @@ func InitRedis() testcontainers.Container {
 	log.Printf("redis should be running at localhost:%d", port.Int())
 	time.Sleep(time.Second * 5)
 
-	reg.Redis = &registry.Server{
-		Host: "localhost",
-		Port: port.Int(),
-		Auth: registry.Auth{
-			Enabled:  true,
-			Password: "password",
+	reg.Redis = &registry.Database{
+		Database: "0",
+		Server: registry.Server{
+			Host: "localhost",
+			Port: port.Int(),
+
+			Auth: registry.Auth{
+				Enabled:  true,
+				Password: "password",
+			},
 		},
 	}
 	registry.Set(reg)
@@ -93,13 +97,16 @@ func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Conta
 	log.Printf("postgres should be running at localhost:%d", port.Int())
 	time.Sleep(time.Second * 5)
 
-	reg.Postgres = &registry.Server{
-		Host: "localhost",
-		Port: port.Int(),
-		Auth: registry.Auth{
-			Enabled:  true,
-			Username: "user",
-			Password: "user100",
+	reg.Postgres = &registry.Database{
+		Database: "test",
+		Server: registry.Server{
+			Host: "localhost",
+			Port: port.Int(),
+			Auth: registry.Auth{
+				Enabled:  true,
+				Username: "user",
+				Password: "user100",
+			},
 		},
 	}
 	registry.Set(reg)

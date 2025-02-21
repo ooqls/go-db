@@ -7,9 +7,9 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	log "github.com/braumsmilk/go-log"
-	registry "github.com/braumsmilk/go-registry"
 	_ "github.com/lib/pq"
+	log "github.com/ooqls/go-log"
+	registry "github.com/ooqls/go-registry"
 	"go.uber.org/zap"
 )
 

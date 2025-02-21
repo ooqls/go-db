@@ -3,20 +3,17 @@ package redis
 import (
 	"crypto/tls"
 	"fmt"
+	"strconv"
 	"sync"
-	"time"
 
-	"github.com/braumsmilk/go-registry"
-	"github.com/gomodule/redigo/redis"
+	"github.com/ooqls/go-registry"
+	"github.com/redis/go-redis/v9"
 )
 
-var pool *redis.Pool
+var pool *redis.Client
 var m sync.Mutex = sync.Mutex{}
 
-func InitDefault() error {
-	m.Lock()
-	defer m.Unlock()
-
+func initDefault() error {
 	if pool != nil {
 		return nil
 	}
@@ -25,6 +22,7 @@ func InitDefault() error {
 	if reg.Redis == nil {
 		return fmt.Errorf("no redis server found in registry")
 	}
+
 	var tlsCfg *tls.Config
 	if reg.Redis.TLS != nil {
 		var err error
@@ -34,28 +32,33 @@ func InitDefault() error {
 		}
 	}
 
-	pool = &redis.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp",
-				fmt.Sprintf("%s:%d", reg.Redis.Host, reg.Redis.Port),
-				redis.DialUseTLS(reg.Redis.TLS != nil),
-				redis.DialPassword(reg.Redis.Auth.Password),
-				redis.DialTLSConfig(tlsCfg))
-		},
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
+	redisDb, err := strconv.Atoi(reg.Redis.Database)
+	if err != nil {
+		return fmt.Errorf("failed to convert database string to int: %v", err)
 	}
+
+	pool = redis.NewClient(&redis.Options{
+
+		Addr:      fmt.Sprintf("%s:%d", reg.Redis.Host, reg.Redis.Port),
+		Password:  reg.Redis.Auth.Password,
+		Username:  reg.Redis.Auth.Username,
+		DB:        redisDb,
+		TLSConfig: tlsCfg,
+		PoolSize:  3,
+	})
 
 	return nil
 }
 
-func GetConnection() redis.Conn {
+func GetConnection() *redis.Client {
 	m.Lock()
 	defer m.Unlock()
-	
-	return pool.Get()
+
+	if pool == nil {
+		if err := initDefault(); err != nil {
+			panic(err)
+		}
+
+	}
+	return pool
 }
