@@ -6,8 +6,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ooqls/go-db/postgres"
+	"github.com/ooqls/go-db/pgx"
+	"github.com/ooqls/go-db/sqlx"
 	"github.com/ooqls/go-db/testutils"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -20,7 +22,7 @@ func TestMain(m *testing.M) {
 	}()
 
 	// Initialize the Postgres container
-	postgresContainer := testutils.InitPostgres(nil, nil)
+	postgresContainer := testutils.StartPostgres(context.Background())
 	defer func() {
 		if err := postgresContainer.Terminate(context.Background()); err != nil {
 			log.Fatalf("failed to terminate postgres container: %v", err)
@@ -35,6 +37,8 @@ func TestConnect(t *testing.T) {
 	// You can add your actual test logic here.
 	t.Log("Running integration tests...")
 
-	postgres.InitDefault()
+	assert.Nilf(t, sqlx.InitDefault(), "Expected InitDefault to return nil, but got an error.")
+
+	assert.Nilf(t, pgx.InitDefault(), "Expected InitDefault to return nil, but got an error.")
 
 }

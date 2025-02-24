@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/ooqls/go-db/postgres"
 	"github.com/ooqls/go-registry"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -61,8 +60,7 @@ func InitRedis() testcontainers.Container {
 	return container
 }
 
-func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Container {
-	ctx := context.Background()
+func StartPostgres(ctx context.Context) testcontainers.Container {
 	arch := runtime.GOARCH
 	image := "postgres:latest"
 	if arch == "arm64" {
@@ -111,12 +109,6 @@ func InitPostgres(tableStmts []string, indexStmts []string) testcontainers.Conta
 	}
 	registry.Set(reg)
 
-	err = postgres.InitDefault()
-	if err != nil {
-		panic(err)
-	}
-
-	postgres.Seed(tableStmts, indexStmts)
-
 	return container
 }
+
