@@ -13,7 +13,7 @@ import (
 var l *zap.Logger = log.NewLogger("pgx")
 var db *pgx.Conn
 
-func GetDBX() *pgx.Conn {
+func GetPGX() *pgx.Conn {
 	var err error
 	if db != nil {
 		err = postgres.Retry(func() error {
@@ -26,10 +26,10 @@ func GetDBX() *pgx.Conn {
 
 	if db == nil || err != nil {
 		if db != nil {
-			db.Close()
+			db.Close(context.Background())
 		}
 
-		db, err = connectPgx(postgres.GetRegistryOptions())
+		db, err = connectPgx(context.Background(), postgres.GetRegistryOptions())
 		if err != nil {
 			panic(err)
 		}
