@@ -34,6 +34,7 @@ func GetSQLX() *sqlx.DB {
 		if err != nil {
 			panic(err)
 		}
+	  db.
 	}
 
 	l.Info("SQLX database connection established")

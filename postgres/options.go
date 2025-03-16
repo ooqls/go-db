@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"crypto/tls"
+	"fmt"
 
 	"github.com/ooqls/go-registry"
 	"go.uber.org/zap"
@@ -14,6 +15,10 @@ type Options struct {
 	DB   string
 	Pw   string
 	Tls  *tls.Config
+}
+
+func (opt *Options) ConnectionString() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s", opt.User, opt.Pw, opt.Host, opt.Port, opt.DB)
 }
 
 var dbName string = "postgres"

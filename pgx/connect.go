@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/ooqls/go-db/postgres"
 	"github.com/ooqls/go-log"
 	"go.uber.org/zap"
@@ -39,16 +39,9 @@ func GetDBX() *pgx.Conn {
 	return db
 }
 
-func connectPgx(opt postgres.Options) (*pgx.Conn, error) {
-
-	conn, err := pgx.Connect(pgx.ConnConfig{
-		Host:      opt.Host,
-		Port:      uint16(opt.Port),
-		User:      opt.User,
-		Password:  opt.Pw,
-		Database:  opt.DB,
-		TLSConfig: opt.Tls,
-	})
+func connectPgx(ctx context.Context, opt postgres.Options) (*pgx.Conn, error) {
+	conStr := opt.ConnectionString()
+	conn, err := pgx.Connect(ctx, conStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to postgres: %v", err)
 	}
@@ -56,8 +49,8 @@ func connectPgx(opt postgres.Options) (*pgx.Conn, error) {
 	return conn, nil
 }
 
-func Init(opt postgres.Options) (*pgx.Conn, error) {
-	conn, err := connectPgx(opt)
+func Init(ctx context.Context, opt postgres.Options) (*pgx.Conn, error) {
+	conn, err := connectPgx(ctx, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +58,9 @@ func Init(opt postgres.Options) (*pgx.Conn, error) {
 }
 
 func InitDefault() error {
+	ctx := context.Background()
 	opts := postgres.GetRegistryOptions()
-	_, err := Init(opts)
+	_, err := Init(ctx, opts)
 	if err != nil {
 
 		l.Error("failed to initialize default options", zap.Error(err))
