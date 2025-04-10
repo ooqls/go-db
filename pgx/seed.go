@@ -1,6 +1,20 @@
 package pgx
 
-import "context"
+import (
+	"context"
+	"os"
+)
+
+func SeedPGXFile(ctx context.Context, sqlFile string) error {
+	db := GetPGX()
+	b, err := os.ReadFile(sqlFile)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(ctx, string(b))
+	return err
+}
 
 func SeedPGX(ctx context.Context, tableStmts []string, indexStmts []string) {
 	// db.Get().Exec(tables.GetDropTableStmt())
