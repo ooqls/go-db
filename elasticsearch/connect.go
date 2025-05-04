@@ -1,6 +1,7 @@
 package elasticsearch
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
@@ -14,29 +15,29 @@ import (
 )
 
 var l *zap.Logger = log.NewLogger("elasticsearch")
-var esClient *elasticsearch.Client
+var esClient *elasticsearch.TypedClient
 var m sync.Mutex
 
 type ElasticsearchOptions struct {
-	Host string
-	Port int
-	User string
-	Pw   string
-	DB   string
+	Host            string
+	Port            int
+	User            string
+	Pw              string
+	DB              string
 	InsecureSkipTLS bool
 }
 
 func Init(opts ElasticsearchOptions) error {
 	m.Lock()
 	defer m.Unlock()
-	
+
 	var err error
 	trans := http.DefaultTransport.(*http.Transport)
 	trans.TLSClientConfig = &tls.Config{
 		InsecureSkipVerify: opts.InsecureSkipTLS,
 	}
 
-	esClient, err = elasticsearch.NewClient(elasticsearch.Config{
+	esClient, err = elasticsearch.NewTypedClient(elasticsearch.Config{
 		Addresses: []string{fmt.Sprintf("https://%s:%d", opts.Host, opts.Port)},
 		Username:  opts.User,
 		Password:  opts.Pw,
@@ -46,22 +47,17 @@ func Init(opts ElasticsearchOptions) error {
 	if err != nil {
 		return fmt.Errorf("error creating the client: %s", err)
 	}
-
+	ctx := context.Background()
 	success := false
 	for i := 0; i < 5; i++ {
 		if i > 0 {
 			l.Info("Retrying to connect to elasticsearch", zap.Int("attempt", i))
 			time.Sleep(time.Second)
 		}
-
-		res, err := esClient.Info()
+		
+		_, err := esClient.Info().Do(ctx)
 		if err != nil {
 			l.Error(fmt.Sprintf("failed to get elasticsearch info, attempt %d", i), zap.Error(err))
-			continue
-		}
-		defer res.Body.Close()
-		if res.IsError() {
-			l.Error(fmt.Sprintf("Got an error in the response, attempt %d", i), zap.String("response", res.String()))
 			continue
 		}
 
@@ -84,21 +80,20 @@ func InitDefault() error {
 	}
 
 	opts := ElasticsearchOptions{
-		Host: reg.Elasticsearch.Host,
-		Port: reg.Elasticsearch.Port,
-		User: reg.Elasticsearch.Auth.Username,
-		Pw:   reg.Elasticsearch.Auth.Password,
-		DB:  reg.Elasticsearch.Database,
-		InsecureSkipTLS: reg.Elasticsearch.TLS != nil && reg.Elasticsearch.TLS.InsecureSkipTLSVerify, 
+		Host:            reg.Elasticsearch.Host,
+		Port:            reg.Elasticsearch.Port,
+		User:            reg.Elasticsearch.Auth.Username,
+		Pw:              reg.Elasticsearch.Auth.Password,
+		DB:              reg.Elasticsearch.Database,
+		InsecureSkipTLS: reg.Elasticsearch.TLS != nil && reg.Elasticsearch.TLS.InsecureSkipTLSVerify,
 	}
 
 	return Init(opts)
 }
 
-func Get() *elasticsearch.Client {
+func Get() *elasticsearch.TypedClient {
 	m.Lock()
 	defer m.Unlock()
 
 	return esClient
 }
-
