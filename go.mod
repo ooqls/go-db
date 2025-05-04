@@ -7,6 +7,7 @@ toolchain go1.23.6
 replace github.com/ooqls/go-registry => /Users/samuelreynolds/github.com/ooqls/go-registry
 
 require (
+	github.com/elastic/elastic-transport-go/v8 v8.7.0
 	github.com/elastic/go-elasticsearch/v9 v9.0.0
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/jmoiron/sqlx v1.4.0
@@ -35,7 +36,7 @@ require (
 	github.com/docker/docker v28.0.1+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/elastic/elastic-transport-go/v8 v8.7.0 // indirect
+	github.com/elastic/go-elasticsearch/v8 v8.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

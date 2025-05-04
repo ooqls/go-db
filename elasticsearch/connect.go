@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v9"
+	"github.com/elastic/elastic-transport-go/v8/elastictransport"
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/ooqls/go-log"
 	"github.com/ooqls/go-registry"
 	"go.uber.org/zap"
@@ -19,12 +21,12 @@ var esClient *elasticsearch.TypedClient
 var m sync.Mutex
 
 type ElasticsearchOptions struct {
-	Host            string
-	Port            int
-	User            string
-	Pw              string
-	DB              string
-	InsecureSkipTLS bool
+	Host      string
+	Port      int
+	User      string
+	Pw        string
+	DB        string
+	TlsConfig *tls.Config
 }
 
 func Init(opts ElasticsearchOptions) error {
@@ -32,18 +34,26 @@ func Init(opts ElasticsearchOptions) error {
 	defer m.Unlock()
 
 	var err error
-	trans := http.DefaultTransport.(*http.Transport)
-	trans.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: opts.InsecureSkipTLS,
-	}
-
+	// headers := http.Header{}
+	// headers.Del("Accept")
+	// headers.Set("Accept", "application/json")
+	// headers.Set("Content-Type", "application/json")
 	esClient, err = elasticsearch.NewTypedClient(elasticsearch.Config{
-		Addresses: []string{fmt.Sprintf("https://%s:%d", opts.Host, opts.Port)},
-		Username:  opts.User,
-		Password:  opts.Pw,
-		Transport: trans,
+		Addresses: []string{
+			fmt.Sprintf("https://%s:%d", opts.Host, opts.Port),
+		},
+		Username:          opts.User,
+		Password:          opts.Pw,
+		EnableDebugLogger: true,
+		Transport: &http.Transport{
+			TLSClientConfig: opts.TlsConfig,
+		},
+		Logger: &elastictransport.TextLogger{
+			Output:             os.Stdout,
+			EnableRequestBody:  true,
+			EnableResponseBody: true,
+		},
 	})
-
 	if err != nil {
 		return fmt.Errorf("error creating the client: %s", err)
 	}
@@ -54,12 +64,14 @@ func Init(opts ElasticsearchOptions) error {
 			l.Info("Retrying to connect to elasticsearch", zap.Int("attempt", i))
 			time.Sleep(time.Second)
 		}
-		
-		_, err := esClient.Info().Do(ctx)
+
+		info, err := esClient.Info().Do(ctx)
 		if err != nil {
 			l.Error(fmt.Sprintf("failed to get elasticsearch info, attempt %d", i), zap.Error(err))
 			continue
 		}
+
+		l.Debug("Connected to Elasticsearch", zap.String("version", info.Version.Int))
 
 		l.Debug("Elasticsearch client initialized successfully")
 		success = true
@@ -79,13 +91,18 @@ func InitDefault() error {
 		return fmt.Errorf("elasticsearch not found in registry")
 	}
 
+	tlsConfig, err := reg.Elasticsearch.TLS.TLSConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get TLS config: %s", err)
+	}
+
 	opts := ElasticsearchOptions{
-		Host:            reg.Elasticsearch.Host,
-		Port:            reg.Elasticsearch.Port,
-		User:            reg.Elasticsearch.Auth.Username,
-		Pw:              reg.Elasticsearch.Auth.Password,
-		DB:              reg.Elasticsearch.Database,
-		InsecureSkipTLS: reg.Elasticsearch.TLS != nil && reg.Elasticsearch.TLS.InsecureSkipTLSVerify,
+		Host:      reg.Elasticsearch.Host,
+		Port:      reg.Elasticsearch.Port,
+		User:      reg.Elasticsearch.Auth.Username,
+		Pw:        reg.Elasticsearch.Auth.Password,
+		DB:        reg.Elasticsearch.Database,
+		TlsConfig: tlsConfig,
 	}
 
 	return Init(opts)
