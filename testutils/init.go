@@ -163,6 +163,7 @@ func StartElasticsearch(ctx context.Context) testcontainers.Container {
 				Username: "elastic",
 			},
 			TLS: &registry.TLSConfig{
+				Enabled:               true,
 				InsecureSkipTLSVerify: true,
 			},
 		},
