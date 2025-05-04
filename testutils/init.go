@@ -14,6 +14,11 @@ import (
 
 var reg registry.Registry = registry.Registry{}
 
+func isArm64() bool {
+	arch := runtime.GOARCH
+	return arch == "arm64"
+}
+
 func InitRedis() testcontainers.Container {
 	ctx := context.Background()
 	c := testcontainers.ContainerRequest{
@@ -61,12 +66,11 @@ func InitRedis() testcontainers.Container {
 }
 
 func StartPostgres(ctx context.Context) testcontainers.Container {
-	arch := runtime.GOARCH
 	image := "postgres:latest"
-	if arch == "arm64" {
+	if isArm64() {
 		image = "arm64v8/postgres:latest"
 	}
-	log.Printf("Detected architecture: %s", arch)
+
 	c := testcontainers.ContainerRequest{
 		Image:        image,
 		ExposedPorts: []string{"5432"},
@@ -112,3 +116,58 @@ func StartPostgres(ctx context.Context) testcontainers.Container {
 	return container
 }
 
+func StartElasticsearch(ctx context.Context) testcontainers.Container {
+	image := "elasticsearch:8.18.0"
+	if isArm64() {
+		image = "arm64v8/elasticsearch:8.18.0"
+	}
+
+	c := testcontainers.ContainerRequest{
+		Image:        image,
+		ExposedPorts: []string{"9200"},
+		Env: map[string]string{
+			"ELASTIC_PASSWORD": "changeme",
+			"discovery.type":   "single-node",
+			"ES_JAVA_OPTS":     "-Xms512m -Xmx512m",
+		},
+		WaitingFor: &wait.LogStrategy{Log: "shards started"},
+	}
+
+	gc := testcontainers.GenericContainerRequest{
+		ContainerRequest: c,
+		Started:          true,
+	}
+
+	container, err := testcontainers.GenericContainer(ctx, gc)
+	if err != nil {
+		panic(fmt.Errorf("failed to start elasticsearch container: %v", err))
+	}
+
+	time.Sleep(time.Second * 10)
+
+	port, err := container.MappedPort(ctx, "9200")
+	if err != nil {
+		panic(fmt.Errorf("failed to get mapped elasticsearch port: %v", err))
+	}
+
+	log.Printf("elasticsearch should be running at localhost:%d", port.Int())
+
+	reg.Elasticsearch = &registry.Database{
+		Database: "elasticsearch",
+		Server: registry.Server{
+			Host: "localhost",
+			Port: port.Int(),
+			Auth: registry.Auth{
+				Enabled:  true,
+				Password: "changeme",
+				Username: "elastic",
+			},
+			TLS: &registry.TLSConfig{
+				InsecureSkipTLSVerify: true,
+			},
+		},
+	}
+	registry.Set(reg)
+
+	return container
+}
