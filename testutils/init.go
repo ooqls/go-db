@@ -3,8 +3,12 @@ package testutils
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"maps"
+	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/ooqls/go-registry"
@@ -14,13 +18,60 @@ import (
 
 var reg registry.Registry = registry.Registry{}
 
+const (
+	opt_logging = "logging"
+	opt_env     = "env"
+	opt_tag     = "tags"
+)
+
+type options struct {
+	key   string
+	value interface{}
+}
+
+func WithLogging() options {
+	return options{
+		key:   opt_logging,
+		value: true,
+	}
+}
+
+func WithEnv(key string, value map[string]string) options {
+	return options{
+		key:   key,
+		value: value,
+	}
+}
+
+func WithTags(tag string) options {
+	return options{
+		key:   opt_tag,
+		value: tag,
+	}
+}
+
 func isArm64() bool {
 	arch := runtime.GOARCH
 	return arch == "arm64"
 }
 
-func InitRedis() testcontainers.Container {
-	ctx := context.Background()
+func applyOptions(c *testcontainers.ContainerRequest, opts ...options) {
+	for _, opt := range opts {
+		switch opt.key {
+		case opt_logging:
+			w := c.BuildLogWriter()
+			io.Copy(w, os.Stdout)
+		case opt_env:
+			envMap := opt.value.(map[string]string)
+			maps.Copy(c.Env, envMap)
+		case opt_tag:
+			baseImage := strings.Split(c.Image, ":")[0]
+			c.Image = fmt.Sprintf("%s:%s", baseImage, opt.value)
+		}
+	}
+}
+
+func StartRedis(ctx context.Context, opts ...options) testcontainers.Container {
 	c := testcontainers.ContainerRequest{
 		Image:        "redis:latest",
 		ExposedPorts: []string{"6379"},
@@ -29,6 +80,8 @@ func InitRedis() testcontainers.Container {
 			"REDIS_PASSWORD": "password",
 		},
 	}
+
+	applyOptions(&c, opts...)
 
 	gc := testcontainers.GenericContainerRequest{
 		ContainerRequest: c,
@@ -65,7 +118,7 @@ func InitRedis() testcontainers.Container {
 	return container
 }
 
-func StartPostgres(ctx context.Context) testcontainers.Container {
+func StartPostgres(ctx context.Context, opts ...options) testcontainers.Container {
 	image := "postgres:latest"
 	if isArm64() {
 		image = "arm64v8/postgres:latest"
@@ -81,6 +134,8 @@ func StartPostgres(ctx context.Context) testcontainers.Container {
 		},
 		WaitingFor: &wait.LogStrategy{Log: "database system is ready to accept connections"},
 	}
+
+	applyOptions(&c, opts...)
 
 	gc := testcontainers.GenericContainerRequest{
 		ContainerRequest: c,
@@ -116,7 +171,7 @@ func StartPostgres(ctx context.Context) testcontainers.Container {
 	return container
 }
 
-func StartElasticsearch(ctx context.Context) testcontainers.Container {
+func StartElasticsearch(ctx context.Context, opts ...options) testcontainers.Container {
 	image := "elasticsearch:8.18.0"
 	if isArm64() {
 		image = "arm64v8/elasticsearch:8.18.0"
@@ -132,6 +187,8 @@ func StartElasticsearch(ctx context.Context) testcontainers.Container {
 		},
 		WaitingFor: &wait.LogStrategy{Log: "shards started"},
 	}
+
+	applyOptions(&c, opts...)
 
 	gc := testcontainers.GenericContainerRequest{
 		ContainerRequest: c,

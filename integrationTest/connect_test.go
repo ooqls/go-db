@@ -14,7 +14,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// Initialize the Redis container
-	redisContainer := testutils.InitRedis()
+	redisContainer := testutils.StartRedis(context.Background())
 	defer func() {
 		if err := redisContainer.Terminate(context.Background()); err != nil {
 			log.Fatalf("failed to terminate redis container: %v", err)
@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 	}()
 
 	// Initialize the Postgres container
-	postgresContainer := testutils.StartPostgres(context.Background())
+	postgresContainer := testutils.StartPostgres(context.Background(), testutils.WithLogging())
 	defer func() {
 		if err := postgresContainer.Terminate(context.Background()); err != nil {
 			log.Fatalf("failed to terminate postgres container: %v", err)
