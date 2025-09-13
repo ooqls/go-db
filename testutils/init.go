@@ -2,10 +2,12 @@ package testutils
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
 	"maps"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -185,7 +187,14 @@ func StartElasticsearch(ctx context.Context, opts ...options) testcontainers.Con
 			"discovery.type":   "single-node",
 			"ES_JAVA_OPTS":     "-Xms512m -Xmx512m",
 		},
-		WaitingFor: &wait.LogStrategy{Log: "shards started"},
+		WaitingFor: wait.ForHTTP("/_cluster/health").
+			WithBasicAuth("elastic", "changeme").
+			WithAllowInsecure(true).
+			WithMethod("GET").
+			WithTLS(true, &tls.Config{InsecureSkipVerify: true}).
+			WithStatusCodeMatcher(func(status int) bool {
+				return status == http.StatusOK
+			}),
 	}
 
 	applyOptions(&c, opts...)
