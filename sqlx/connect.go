@@ -2,6 +2,7 @@ package sqlx
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/jmoiron/sqlx"
 
@@ -13,6 +14,7 @@ import (
 
 var db *sqlx.DB
 var l *zap.Logger = log.NewLogger("db")
+var m sync.Mutex = sync.Mutex{}
 
 func GetSQLX() *sqlx.DB {
 	var err error
@@ -55,21 +57,48 @@ func connectSqlx(opt postgres.Options) (*sqlx.DB, error) {
 }
 
 func Init(opt postgres.Options) (*sqlx.DB, error) {
-	dbCon, err := connectSqlx(opt)
-	if err != nil {
-		return nil, err
-	}
+	m.Lock()
+	defer m.Unlock()
 
-	db = dbCon
-	return dbCon, nil
+	err := initSQLX(opt)
+	return db, err
 }
 
 func InitDefault() error {
-	_, err := Init(postgres.GetRegistryOptions()) // Updated to use GetOptions()
+	m.Lock()
+	defer m.Unlock()
+
+	err := initSQLX(postgres.GetRegistryOptions()) // Updated to use GetOptions()
 	if err != nil {
 		l.Error("failed to initialize default options", zap.Error(err))
 		return err
 	}
 	l.Info("default options initialized successfully")
+	return nil
+}
+
+func initSQLX(opt postgres.Options) error {
+	var err error
+	if db != nil {
+		err = postgres.Retry(func() error {
+			return db.Ping()
+		})
+		if err != nil {
+			l.Error("failed to ensure connection", zap.Error(err))
+		}
+	}
+
+	if db == nil || err != nil {
+		if db != nil {
+			db.Close()
+		}
+
+		db, err = connectSqlx(opt)
+		if err != nil {
+			return err
+		}
+	}
+
+	l.Info("SQLX database connection established")
 	return nil
 }
