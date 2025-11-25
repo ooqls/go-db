@@ -29,11 +29,6 @@ func initRedis(db *registry.Database) error {
 		return nil
 	}
 
-	reg := registry.Get()
-	if reg.Redis == nil {
-		return fmt.Errorf("no redis server found in registry")
-	}
-
 	var tlsCfg *tls.Config
 	if db.TLS != nil {
 		var err error
