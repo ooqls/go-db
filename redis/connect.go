@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/ooqls/go-registry"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 var pool *redis.Client
@@ -54,14 +56,13 @@ func initRedis(db *registry.Database) error {
 
 	return nil
 
-
 }
 func InitDefault() error {
 	m.Lock()
 	defer m.Unlock()
 
 	reg := registry.Get()
-	if reg.Redis == nil  {
+	if reg.Redis == nil {
 		return fmt.Errorf("no redis server found in registry")
 	}
 
@@ -71,9 +72,6 @@ func InitDefault() error {
 }
 
 func GetConnection(ctx context.Context) *redis.Client {
-	m.Lock()
-	defer m.Unlock()
-
 	if pool == nil {
 		if err := InitDefault(); err != nil {
 			panic(err)
@@ -82,8 +80,11 @@ func GetConnection(ctx context.Context) *redis.Client {
 	} else {
 		if err := pool.Ping(ctx).Err(); err != nil {
 			pool = nil
-			if err := initRedis(redisCfg); err != nil {
-				panic(err)
+			for err != nil {
+				if err := initRedis(redisCfg); err != nil {
+					zap.L().Error("redis client was diconnected, reconnecting...")
+					time.Sleep(time.Second * 3)
+				}
 			}
 		}
 	}

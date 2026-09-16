@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ooqls/go-db/testutils"
+	"github.com/ooqls/go-db/containers"
 	"github.com/ooqls/go-registry"
 	"github.com/stretchr/testify/assert"
 )
@@ -12,7 +12,7 @@ import (
 func TestConnect(t *testing.T) {
 	ctx := context.Background()
 
-	container := testutils.StartElasticsearch(ctx)
+	container := containers.StartElasticsearch(ctx)
 	defer container.Terminate(ctx)
 
 	port, err := container.MappedPort(ctx, "9200")

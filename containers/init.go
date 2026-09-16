@@ -1,11 +1,10 @@
-package testutils
+package containers
 
 import (
 	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"maps"
 	"net/http"
 	"os"
@@ -13,9 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/ooqls/go-registry"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"go.uber.org/zap"
 )
 
 var reg registry.Registry = registry.Registry{}
@@ -26,27 +27,27 @@ const (
 	opt_tag     = "tags"
 )
 
-type options struct {
+type Options struct {
 	key   string
 	value interface{}
 }
 
-func WithLogging() options {
-	return options{
+func WithLogging() Options {
+	return Options{
 		key:   opt_logging,
 		value: true,
 	}
 }
 
-func WithEnv(key string, value map[string]string) options {
-	return options{
+func WithEnv(key string, value map[string]string) Options {
+	return Options{
 		key:   key,
 		value: value,
 	}
 }
 
-func WithTags(tag string) options {
-	return options{
+func WithTags(tag string) Options {
+	return Options{
 		key:   opt_tag,
 		value: tag,
 	}
@@ -57,7 +58,7 @@ func isArm64() bool {
 	return arch == "arm64"
 }
 
-func applyOptions(c *testcontainers.ContainerRequest, opts ...options) {
+func applyOptions(c *testcontainers.ContainerRequest, opts ...Options) {
 	for _, opt := range opts {
 		switch opt.key {
 		case opt_logging:
@@ -73,7 +74,57 @@ func applyOptions(c *testcontainers.ContainerRequest, opts ...options) {
 	}
 }
 
-func StartRedis(ctx context.Context, opts ...options) testcontainers.Container {
+func requestContainer(ctx context.Context, req testcontainers.GenericContainerRequest, mappedPort string) (nat.Port, *testcontainers.Container, error) {
+	container, err := testcontainers.GenericContainer(ctx, req)
+	if err != nil {
+		return nat.Port("0"), nil, fmt.Errorf("failed to request container: %v", err)
+	}
+
+	time.Sleep(time.Second * 10)
+
+	port, err := container.MappedPort(ctx, nat.Port(mappedPort))
+	if err != nil {
+		return nat.Port("0"), nil, fmt.Errorf("failed to get mapped port: %v", err)
+	}
+
+	return port, &container, nil
+}
+
+func StartValkey(ctx context.Context, opts ...Options) testcontainers.Container {
+	image := "valkey/valkey:latest"
+	c := testcontainers.ContainerRequest{
+		Image:        image,
+		ExposedPorts: []string{"6379"},
+		WaitingFor:   &wait.LogStrategy{Log: "Ready to accept connections"},
+		Env:          map[string]string{},
+	}
+
+	applyOptions(&c, opts...)
+
+	gc := testcontainers.GenericContainerRequest{
+		ContainerRequest: c,
+		Started:          true,
+	}
+
+	port, container, err := requestContainer(ctx, gc, "6379")
+	if err != nil {
+		panic(fmt.Errorf("failed to request container: %v", err))
+	}
+	time.Sleep(3 * time.Second)
+	zap.L().Debug("valkey should be running", zap.Int("port", port.Int()))
+
+	reg.Valkey = &registry.Database{
+		Server: registry.Server{
+			Host: "localhost",
+			Port: port.Int(),
+		},
+	}
+	registry.Set(reg)
+
+	return *container
+}
+
+func StartRedis(ctx context.Context, opts ...Options) testcontainers.Container {
 	c := testcontainers.ContainerRequest{
 		Image:        "redis:latest",
 		ExposedPorts: []string{"6379"},
@@ -90,18 +141,12 @@ func StartRedis(ctx context.Context, opts ...options) testcontainers.Container {
 		Started:          true,
 	}
 
-	container, err := testcontainers.GenericContainer(ctx, gc)
+	port, container, err := requestContainer(ctx, gc, "6379")
 	if err != nil {
-		panic(fmt.Errorf("failed to start redis container: %v", err))
+		panic(fmt.Errorf("failed to request redis container: %v", err))
 	}
-
-	port, err := container.MappedPort(ctx, "6379")
-	if err != nil {
-		panic(fmt.Errorf("failed to get mapped redis port: %v", err))
-	}
-
-	log.Printf("redis should be running at localhost:%d", port.Int())
-	time.Sleep(time.Second * 5)
+	time.Sleep(3 * time.Second)
+	zap.L().Debug("redis should be running", zap.Int("port", port.Int()))
 
 	reg.Redis = &registry.Database{
 		Database: "0",
@@ -117,10 +162,10 @@ func StartRedis(ctx context.Context, opts ...options) testcontainers.Container {
 	}
 	registry.Set(reg)
 
-	return container
+	return *container
 }
 
-func StartPostgres(ctx context.Context, opts ...options) testcontainers.Container {
+func StartPostgres(ctx context.Context, opts ...Options) testcontainers.Container {
 	image := "postgres:latest"
 	if isArm64() {
 		image = "arm64v8/postgres:latest"
@@ -143,18 +188,13 @@ func StartPostgres(ctx context.Context, opts ...options) testcontainers.Containe
 		ContainerRequest: c,
 		Started:          true,
 	}
-	container, err := testcontainers.GenericContainer(ctx, gc)
-	if err != nil {
-		panic(fmt.Errorf("failed to start postgres container: %v", err))
-	}
 
-	port, err := container.MappedPort(ctx, "5432")
+	port, container, err := requestContainer(ctx, gc, "5432")
 	if err != nil {
-		panic(fmt.Errorf("failed to get mapped postgres port: %v", err))
+		panic(fmt.Errorf("failed to request postgres container: %v", err))
 	}
-
-	log.Printf("postgres should be running at localhost:%d", port.Int())
-	time.Sleep(time.Second * 5)
+	time.Sleep(3 * time.Second)
+	zap.L().Debug("postgres should be running", zap.Int("port", port.Int()))
 
 	reg.Postgres = &registry.Database{
 		Database: "test",
@@ -170,10 +210,10 @@ func StartPostgres(ctx context.Context, opts ...options) testcontainers.Containe
 	}
 	registry.Set(reg)
 
-	return container
+	return *container
 }
 
-func StartElasticsearch(ctx context.Context, opts ...options) testcontainers.Container {
+func StartElasticsearch(ctx context.Context, opts ...Options) testcontainers.Container {
 	image := "elasticsearch:8.18.0"
 	if isArm64() {
 		image = "arm64v8/elasticsearch:8.18.0"
@@ -204,19 +244,12 @@ func StartElasticsearch(ctx context.Context, opts ...options) testcontainers.Con
 		Started:          true,
 	}
 
-	container, err := testcontainers.GenericContainer(ctx, gc)
+	port, container, err := requestContainer(ctx, gc, "9200")
 	if err != nil {
-		panic(fmt.Errorf("failed to start elasticsearch container: %v", err))
+		panic(fmt.Errorf("failed to request an elasticsearch container: %v", err))
 	}
-
-	time.Sleep(time.Second * 10)
-
-	port, err := container.MappedPort(ctx, "9200")
-	if err != nil {
-		panic(fmt.Errorf("failed to get mapped elasticsearch port: %v", err))
-	}
-
-	log.Printf("elasticsearch should be running at localhost:%d", port.Int())
+	time.Sleep(3 * time.Second)
+	zap.L().Debug("elasticsearch should be running", zap.Int("port", port.Int()))
 
 	reg.Elasticsearch = &registry.Database{
 		Database: "elasticsearch",
@@ -236,5 +269,5 @@ func StartElasticsearch(ctx context.Context, opts ...options) testcontainers.Con
 	}
 	registry.Set(reg)
 
-	return container
+	return *container
 }
