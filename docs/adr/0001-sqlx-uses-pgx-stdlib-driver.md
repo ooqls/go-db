@@ -1,0 +1,3 @@
+# sqlx uses the pgx stdlib driver, not lib/pq
+
+`sqlx`'s connection used `lib/pq`, which takes a string DSN and has no way to accept a `*tls.Config` — so TLS settings resolved by `dbconfig.Resolve` silently never reached it. We switched `sqlx`'s underlying driver to `jackc/pgx/v5/stdlib` (via `stdlib.OpenDB`), which accepts a `pgx.ConnConfig` with `TLSConfig` set directly, giving `sqlx` the same TLS behavior as `pgx`. This let us drop `lib/pq` as a dependency entirely. If `sqlx`'s connection behavior ever looks different from `pgx`'s, check here first — they now share the same `postgres.ConnConfig` builder.

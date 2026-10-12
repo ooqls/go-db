@@ -177,7 +177,7 @@ func StartPostgres(ctx context.Context, opts ...Options) testcontainers.Containe
 		Env: map[string]string{
 			"POSTGRES_USER":     "user",
 			"POSTGRES_PASSWORD": "user100",
-			"POSTGRES_DB":       "postgres",
+			"POSTGRES_DB":       "test",
 		},
 		WaitingFor: &wait.LogStrategy{Log: "database system is ready to accept connections"},
 	}

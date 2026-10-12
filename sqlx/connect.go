@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
-	_ "github.com/lib/pq"
+	"github.com/ooqls/go-db/dbconfig"
 	"github.com/ooqls/go-db/postgres"
 	log "github.com/ooqls/go-log"
+	"github.com/ooqls/go-registry"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +34,13 @@ func GetSQLX() *sqlx.DB {
 			db.Close()
 		}
 
-		db, err = connectSqlx(postgres.GetRegistryOptions())
+		reg := registry.Get()
+		cfg, resolveErr := dbconfig.Resolve(reg.Postgres)
+		if resolveErr != nil {
+			panic(resolveErr)
+		}
+
+		db, err = connectSqlx(cfg)
 		if err != nil {
 			panic(err)
 		}
@@ -42,25 +50,30 @@ func GetSQLX() *sqlx.DB {
 	return db
 }
 
-func connectSqlx(opt postgres.Options) (*sqlx.DB, error) {
-	conStr := fmt.Sprintf("host=%s password=%s port=%d user=%s dbname=%s sslmode=disable",
-		opt.Host, opt.Pw, opt.Port, opt.User, opt.DB)
-	l.Info("connection string", zap.String("con", conStr))
-	dbCon, err := sqlx.Open("postgres", conStr)
+func connectSqlx(cfg dbconfig.DialConfig) (*sqlx.DB, error) {
+	connCfg, err := postgres.ConnConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open sql: %v", err)
+		return nil, fmt.Errorf("failed to build postgres connection config: %v", err)
 	}
+
+	sqlDB := stdlib.OpenDB(*connCfg)
+	dbCon := sqlx.NewDb(sqlDB, "pgx")
 
 	db = dbCon
 
 	return dbCon, nil
 }
 
-func Init(opt postgres.Options) (*sqlx.DB, error) {
+func Init(dbCfg *registry.Database) (*sqlx.DB, error) {
 	m.Lock()
 	defer m.Unlock()
 
-	err := initSQLX(opt)
+	cfg, err := dbconfig.Resolve(dbCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	err = initSQLX(cfg)
 	return db, err
 }
 
@@ -68,7 +81,14 @@ func InitDefault() error {
 	m.Lock()
 	defer m.Unlock()
 
-	err := initSQLX(postgres.GetRegistryOptions()) // Updated to use GetOptions()
+	reg := registry.Get()
+	cfg, err := dbconfig.Resolve(reg.Postgres)
+	if err != nil {
+		l.Error("failed to resolve postgres config", zap.Error(err))
+		return err
+	}
+
+	err = initSQLX(cfg)
 	if err != nil {
 		l.Error("failed to initialize default options", zap.Error(err))
 		return err
@@ -77,7 +97,7 @@ func InitDefault() error {
 	return nil
 }
 
-func initSQLX(opt postgres.Options) error {
+func initSQLX(cfg dbconfig.DialConfig) error {
 	var err error
 	if db != nil {
 		err = postgres.Retry(func() error {
@@ -93,7 +113,7 @@ func initSQLX(opt postgres.Options) error {
 			db.Close()
 		}
 
-		db, err = connectSqlx(opt)
+		_, err = connectSqlx(cfg)
 		if err != nil {
 			return err
 		}

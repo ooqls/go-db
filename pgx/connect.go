@@ -6,8 +6,10 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/ooqls/go-db/dbconfig"
 	"github.com/ooqls/go-db/postgres"
 	"github.com/ooqls/go-log"
+	"github.com/ooqls/go-registry"
 	"go.uber.org/zap"
 )
 
@@ -34,7 +36,13 @@ func GetPGX() *pgx.Conn {
 			db.Close(context.Background())
 		}
 
-		db, err = connectPgx(context.Background(), postgres.GetRegistryOptions())
+		reg := registry.Get()
+		cfg, resolveErr := dbconfig.Resolve(reg.Postgres)
+		if resolveErr != nil {
+			panic(resolveErr)
+		}
+
+		db, err = connectPgx(context.Background(), cfg)
 		if err != nil {
 			panic(err)
 		}
@@ -44,9 +52,13 @@ func GetPGX() *pgx.Conn {
 	return db
 }
 
-func connectPgx(ctx context.Context, opt postgres.Options) (*pgx.Conn, error) {
-	conStr := opt.ConnectionString()
-	conn, err := pgx.Connect(ctx, conStr)
+func connectPgx(ctx context.Context, cfg dbconfig.DialConfig) (*pgx.Conn, error) {
+	connCfg, err := postgres.ConnConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := pgx.ConnectConfig(ctx, connCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to postgres: %v", err)
 	}
@@ -54,11 +66,16 @@ func connectPgx(ctx context.Context, opt postgres.Options) (*pgx.Conn, error) {
 	return conn, nil
 }
 
-func Init(ctx context.Context, opt postgres.Options) (*pgx.Conn, error) {
+func Init(ctx context.Context, dbCfg *registry.Database) (*pgx.Conn, error) {
 	m.Lock()
 	defer m.Unlock()
 
-	conn, err := connectPgx(ctx, opt)
+	cfg, err := dbconfig.Resolve(dbCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := connectPgx(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -68,12 +85,16 @@ func Init(ctx context.Context, opt postgres.Options) (*pgx.Conn, error) {
 func InitDefault() error {
 	m.Lock()
 	defer m.Unlock()
-	
-	ctx := context.Background()
-	opts := postgres.GetRegistryOptions()
-	err := initPGX(ctx, opts)
-	if err != nil {
 
+	reg := registry.Get()
+	cfg, err := dbconfig.Resolve(reg.Postgres)
+	if err != nil {
+		l.Error("failed to resolve postgres config", zap.Error(err))
+		return err
+	}
+
+	err = initPGX(context.Background(), cfg)
+	if err != nil {
 		l.Error("failed to initialize default options", zap.Error(err))
 		return err
 	}
@@ -81,7 +102,7 @@ func InitDefault() error {
 	return nil
 }
 
-func initPGX(ctx context.Context, opt postgres.Options) error {
+func initPGX(ctx context.Context, cfg dbconfig.DialConfig) error {
 	var err error
 	if db != nil {
 		err = postgres.Retry(func() error {
@@ -93,7 +114,7 @@ func initPGX(ctx context.Context, opt postgres.Options) error {
 	}
 
 	if db == nil {
-		db, err = connectPgx(ctx, opt)
+		db, err = connectPgx(ctx, cfg)
 		if err != nil {
 			return err
 		}
