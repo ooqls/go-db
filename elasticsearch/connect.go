@@ -2,7 +2,6 @@ package elasticsearch
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/elastic/elastic-transport-go/v8/elastictransport"
 	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/ooqls/go-db/dbconfig"
 	"github.com/ooqls/go-log"
 	"github.com/ooqls/go-registry"
 	"go.uber.org/zap"
@@ -20,33 +20,28 @@ var l *zap.Logger = log.NewLogger("elasticsearch")
 var esClient *elasticsearch.TypedClient
 var m sync.Mutex
 
-type ElasticsearchOptions struct {
-	Host      string
-	Port      int
-	User      string
-	Pw        string
-	DB        string
-	TlsConfig *tls.Config
-}
-
-func Init(opts ElasticsearchOptions) error {
+func Init(db *registry.Database) error {
 	m.Lock()
 	defer m.Unlock()
 
-	var err error
+	cfg, err := dbconfig.Resolve(db)
+	if err != nil {
+		return fmt.Errorf("failed to resolve elasticsearch config: %v", err)
+	}
+
 	// headers := http.Header{}
 	// headers.Del("Accept")
 	// headers.Set("Accept", "application/json")
 	// headers.Set("Content-Type", "application/json")
 	esClient, err = elasticsearch.NewTypedClient(elasticsearch.Config{
 		Addresses: []string{
-			fmt.Sprintf("https://%s:%d", opts.Host, opts.Port),
+			fmt.Sprintf("https://%s", cfg.Addr()),
 		},
-		Username:          opts.User,
-		Password:          opts.Pw,
+		Username:          cfg.Username,
+		Password:          cfg.Password,
 		EnableDebugLogger: true,
 		Transport: &http.Transport{
-			TLSClientConfig: opts.TlsConfig,
+			TLSClientConfig: cfg.TLS,
 		},
 		Logger: &elastictransport.TextLogger{
 			Output:             os.Stdout,
@@ -91,21 +86,7 @@ func InitDefault() error {
 		return fmt.Errorf("elasticsearch not found in registry")
 	}
 
-	tlsConfig, err := reg.Elasticsearch.TLS.TLSConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get TLS config: %s", err)
-	}
-
-	opts := ElasticsearchOptions{
-		Host:      reg.Elasticsearch.Host,
-		Port:      reg.Elasticsearch.Port,
-		User:      reg.Elasticsearch.Auth.Username,
-		Pw:        reg.Elasticsearch.Auth.Password,
-		DB:        reg.Elasticsearch.Database,
-		TlsConfig: tlsConfig,
-	}
-
-	return Init(opts)
+	return Init(reg.Elasticsearch)
 }
 
 func Get() *elasticsearch.TypedClient {
