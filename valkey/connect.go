@@ -2,11 +2,11 @@ package valkey
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/ooqls/go-db/dbconfig"
 	"github.com/ooqls/go-registry"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
@@ -46,22 +46,16 @@ func initValkey(db *registry.Database) error {
 
 	valkeyCfg = db
 
-	var tlsCfg *tls.Config
-	if db.TLS != nil {
-		var err error
-		tlsCfg, err = db.TLS.TLSConfig()
-		if err != nil {
-			return err
-		}
+	cfg, err := dbconfig.Resolve(db)
+	if err != nil {
+		return err
 	}
 
-	var err error
-
 	c, err = valkey.NewClient(valkey.ClientOption{
-		TLSConfig:   tlsCfg,
-		Username:    db.Auth.Username,
-		Password:    db.Auth.Password,
-		InitAddress: []string{fmt.Sprintf("%s:%d", db.Host, db.Port)},
+		TLSConfig:   cfg.TLS,
+		Username:    cfg.Username,
+		Password:    cfg.Password,
+		InitAddress: []string{cfg.Addr()},
 	})
 	return err
 }

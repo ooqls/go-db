@@ -2,12 +2,12 @@ package redis
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/ooqls/go-db/dbconfig"
 	"github.com/ooqls/go-registry"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -17,11 +17,11 @@ var pool *redis.Client
 var redisCfg *registry.Database
 var m sync.Mutex = sync.Mutex{}
 
-func Init(db registry.Database) error {
+func Init(db *registry.Database) error {
 	m.Lock()
 	defer m.Unlock()
 
-	return initRedis(&db)
+	return initRedis(db)
 }
 
 func initRedis(db *registry.Database) error {
@@ -31,26 +31,22 @@ func initRedis(db *registry.Database) error {
 		return nil
 	}
 
-	var tlsCfg *tls.Config
-	if db.TLS != nil {
-		var err error
-		tlsCfg, err = db.TLS.TLSConfig()
-		if err != nil {
-			return fmt.Errorf("failed to load tls config for redis: %v", err)
-		}
+	cfg, err := dbconfig.Resolve(db)
+	if err != nil {
+		return fmt.Errorf("failed to resolve redis config: %v", err)
 	}
 
-	redisDb, err := strconv.Atoi(db.Database)
+	redisDb, err := strconv.Atoi(cfg.Database)
 	if err != nil {
 		return fmt.Errorf("failed to convert database string to int: %v", err)
 	}
 
 	pool = redis.NewClient(&redis.Options{
-		Addr:      fmt.Sprintf("%s:%d", db.Host, db.Port),
-		Password:  db.Auth.Password,
-		Username:  db.Auth.Username,
+		Addr:      cfg.Addr(),
+		Password:  cfg.Password,
+		Username:  cfg.Username,
 		DB:        redisDb,
-		TLSConfig: tlsCfg,
+		TLSConfig: cfg.TLS,
 		PoolSize:  3,
 	})
 
